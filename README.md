@@ -1,102 +1,123 @@
 # Machine Learning Model Drift Audit | EarlyAlert
 
-**A reproducible analysis of model performance degradation, population drift, and subgroup risk in an early-warning classification system.**
+**Evaluating model reliability across changing populations, data systems, and institutional policies.**
 
-## Project Overview
+A reproducible Python case study combining **classification performance analysis, statistical drift detection, subgroup evaluation, and model-risk monitoring**. The focus is not simply whether the model's inputs changed, but whether those changes undermined its ability to identify people who needed support.
 
-EarlyAlert is a fictional college early-warning system designed to identify first-year students at risk of not returning for their second year. A classifier developed using a Fall 2023 cohort was applied unchanged to Fall 2025, despite changes in enrollment patterns, the learning management system (LMS), and financial administration policies.
+> **Key finding:** In Fall 2025, the unchanged early-warning model failed to flag **689 of 1,417 students who did not return (48.6%)**, even as its overall accuracy increased. The audit recommends pausing automated alerts, validating the LMS data feed, and retraining with appropriate human oversight.
 
-This project audits whether the original model remained effective, identifies where the data changed, and translates the findings into practical monitoring and model-governance recommendations. The analysis uses two cohort datasets comprising **8,100 records** (4,200 in 2023; 3,900 in 2025).
+## Business Context
 
-**Central finding:** The model's accuracy increased, but its ability to identify actual dropouts deteriorated sharply. In Fall 2025, **689 of 1,417 students who did not return (48.6%) were not flagged** for intervention.
+EarlyAlert is a fictional college early-warning system that assigns first-year students a probability of not returning for their second year. Students with predicted risk **≥ 0.30** are flagged for advisor outreach. The system was developed on a Fall 2023 cohort and applied unchanged to Fall 2025, when fewer alerts coincided with more students leaving.
 
-## Business Questions
+This analysis uses **8,100 cohort records**: 4,200 from Fall 2023 and 3,900 from Fall 2025. The institution and scenario are fictional; the work is an educational model-auditing case study, not an evaluation of a live student-support service.
 
-- Did the unchanged model retain its ability to identify at-risk students in 2025?
-- Which student groups experienced the largest gaps between predicted risk and observed outcomes?
-- Which features shifted between cohorts, and how might institutional changes explain the shifts?
-- What should be monitored, and when should the organization intervene, repair data pipelines, or retrain the model?
+### Questions addressed
 
-## Analytical Approach
+- Did the model still identify students at risk when applied to a later cohort?
+- Which groups experienced the largest missed-case and predicted-risk gaps?
+- Which input distributions changed, and which institutional events could explain them?
+- What monitoring controls and human decisions would be needed before redeployment?
 
-### 1. Baseline model and out-of-time evaluation
+## Analytical Workflow
 
-- Explored cohort characteristics, missingness, feature distributions, and relationships.
-- Engineered a `has_balance` indicator and used a scikit-learn preprocessing pipeline with numerical scaling, binary-feature passthrough, and categorical one-hot encoding.
-- Trained a **class-weighted logistic regression** classifier on Fall 2023 with a **stratified 75/25 train/test split**.
-- Evaluated the 2023 holdout and the entire 2025 cohort using the same **0.30 alert threshold**, without retraining or refitting the prediction model on 2025 data.
-- Compared ROC AUC, accuracy, recall, precision, alert rate, average predicted risk, and observed dropout rate.
-
-### 2. Subgroup performance
-
-Evaluated 2025 outcomes across **delivery mode, age group, international status, and outstanding-balance status**, comparing recall, mean predicted risk, observed dropout rate, and missed cases. The difference between observed dropout rate and mean predicted risk is reported as a **group-level risk gap**; it is not a complete probability-calibration assessment.
-
-### 3. Data drift detection
-
-Applied complementary techniques to the 2023 and 2025 feature distributions:
-
-| Method | Purpose |
+| Stage | Approach |
 | --- | --- |
-| Population Stability Index (PSI) | Quantify feature-level distribution changes, including categorical features |
-| Kolmogorov–Smirnov test | Compare numerical distributions |
-| Wasserstein distance | Measure the magnitude of numerical distribution shifts in original units |
-| Chi-square test | Compare categorical and binary feature distributions |
-| Domain classifier | Test how well a separate logistic regression distinguishes 2023 from 2025 records |
+| Exploratory analysis | Profile cohort sizes, missing values, numerical/categorical distributions, and feature relationships. |
+| Baseline modeling | Engineer a `has_balance` indicator; preprocess with `ColumnTransformer` (numerical scaling, binary passthrough, categorical one-hot encoding); train **class-weighted logistic regression** using a **stratified 75/25 split** of Fall 2023. |
+| Out-of-time validation | Apply the **unchanged prediction pipeline** to the full Fall 2025 cohort, using the same **0.30** intervention threshold. |
+| Subgroup analysis | Compare recall, observed dropout rate, mean predicted risk, and missed cases by delivery mode, age, international status, and balance owing. |
+| Feature drift | Compute PSI for **14 features**, including categorical/binary attributes; supplement with **Kolmogorov–Smirnov, Wasserstein distance, and chi-square tests**. |
+| Model-based drift | Train a separate logistic-regression **domain classifier** to distinguish 2023 from 2025; evaluate held-out ROC AUC and rank feature coefficients. |
+| Operational response | Translate performance and drift evidence into proposed monitoring thresholds, escalation actions, and human review. |
 
-PSI monitoring bands used in this analysis: **GREEN < 0.10**, **AMBER 0.10–< 0.25**, and **RED ≥ 0.25**. These are screening thresholds, not proof of a causal change or model failure.
+## Key Findings
 
-## Key Results
+### 1. Accuracy improved while detection deteriorated
 
-### Model performance
-
-| Metric | Fall 2023 holdout (n=1,050) | Fall 2025 (n=3,900) |
+| Metric | Fall 2023 holdout (n = 1,050) | Fall 2025 (n = 3,900) |
 | --- | ---: | ---: |
 | Accuracy | 57.62% | 71.77% |
 | ROC AUC | 0.8029 | 0.7536 |
-| **Recall** | **89.72%** | **51.38%** |
+| **Recall (dropouts flagged)** | **89.72%** | **51.38%** |
 | Precision | 35.14% | 63.86% |
 | Students flagged | 61.52% | 29.23% |
 | Mean predicted risk | 42.15% | 22.44% |
 | Actual dropout rate | 24.10% | 36.33% |
 
-Accuracy alone would have given a misleading impression of improvement. While the observed dropout rate rose by **12.24 percentage points**, the alert rate fell by **32.29 percentage points** and recall dropped by **38.35 percentage points**. The model missed **689 actual dropouts** in the 2025 cohort.
+The observed dropout rate increased by **12.23 percentage points**, while the share of students flagged fell by **32.29 points**. Recall declined by **38.34 points**. Of the **1,417** students who did not return in 2025, **689** were never flagged for outreach.
 
-### Subgroup findings
+**Interpretation:** Accuracy alone would suggest an improvement, but recall and alert coverage reveal a failure against the system's primary operational purpose. The 2023 figures are based on a holdout sample; the 2025 figures cover the full later cohort.
 
-The most pronounced operational gap appeared among students with an outstanding balance:
+### 2. The highest-risk financial subgroup was under-identified
 
-| Fall 2025 subgroup | Actual dropout rate | Mean predicted risk | Recall |
-| --- | ---: | ---: | ---: |
-| Balance owing | 58.24% | 23.40% | 44.65% |
-| No balance | 27.81% | 22.07% | 56.85% |
-| Under age 25 | 33.79% | 18.79% | 44.00% |
-| Age 25 and over | 42.14% | 30.76% | 64.87% |
+| Fall 2025 group | Students | Actual dropout rate | Mean predicted risk | Recall |
+| --- | ---: | ---: | ---: | ---: |
+| Balance owing | 1,092 | 58.24% | 23.40% | **44.65%** |
+| No balance | 2,808 | 27.81% | 22.07% | 56.85% |
+| Under 25 | 2,711 | 33.79% | 18.79% | 44.00% |
+| Age 25+ | 1,189 | 42.14% | 30.76% | 64.87% |
+| In-person | 1,728 | 31.89% | 18.47% | 43.01% |
+| Online | 1,380 | 45.22% | 30.55% | 62.34% |
 
-For students with a balance owing, the observed dropout rate exceeded the group's mean predicted risk by approximately **34.8 percentage points**. The 2025 policy of deregistering students with unpaid balances after week six is a plausible contributor, although the analysis does not establish causality.
+Students with an outstanding balance had **more than twice** the observed dropout rate of those without one, yet received nearly the same average predicted risk. Their group-level difference between observed dropout and mean predicted risk was approximately **34.8 percentage points**. This is a descriptive group-level risk gap, **not** a full calibration analysis.
 
-### Distribution shifts
+The notebook also evaluates hybrid delivery and domestic/international status. Subgroup differences motivate targeted investigation; they do not establish that group membership caused the errors.
 
-| Feature | PSI | Status |
-| --- | ---: | --- |
-| `lms_logins_first4wks` | 3.4637 | RED |
-| `delivery_mode` | 0.4468 | RED |
-| `commute_minutes` | 0.4099 | RED |
-| `international` | 0.1575 | AMBER |
-| `age` | 0.1427 | AMBER |
+### 3. Multiple features drifted substantially
 
-The remaining nine assessed features were GREEN. The largest shift occurred in LMS logins, consistent with a potential change in measurement or data mapping following an LMS vendor migration. Changes in delivery mode and commute time align with the expansion of online offerings.
+PSI was calculated against the Fall 2023 reference distribution. Screening bands: **GREEN < 0.10**, **AMBER 0.10–< 0.25**, **RED ≥ 0.25**.
 
-A separate **domain classifier achieved a held-out ROC AUC of 0.9709**, indicating that the two cohorts were readily distinguishable based on their features. This supports strong covariate drift; it does not, on its own, establish which changes caused the prediction model's performance decline.
+| Feature | PSI | Band | Supporting evidence |
+| --- | ---: | --- | --- |
+| `lms_logins_first4wks` | **3.4637** | RED | KS D = 0.669; Wasserstein = 34.6 logins |
+| `delivery_mode` | **0.4468** | RED | Chi-square = 834.15, p < 0.001 |
+| `commute_minutes` | **0.4099** | RED | KS D = 0.254; Wasserstein = 7.8 minutes |
+| `international` | 0.1575 | AMBER | Chi-square = 303.59, p < 0.001 |
+| `age` | 0.1427 | AMBER | KS D = 0.156; Wasserstein = 2.04 years |
 
-## Recommendations
+Across the 14 evaluated features, **3 were RED, 2 AMBER, and 9 GREEN**. The extremely large LMS-login shift warrants checking feature definitions and integration quality before treating the values as comparable. Small p-values alone do not imply a practically important shift; effect size and business context matter.
 
-1. **Pause automated alert decisions** until the data pipeline and model behavior have been reviewed; retain human-led student support and escalation routes.
-2. **Investigate and correct LMS feature mapping**, validating definitions, units, distributions, and missingness across the vendor migration.
-3. **Retrain and revalidate** on representative, recent data, with particular attention to recall, threshold selection, subgroup outcomes, and the effects of the balance-related policy.
-4. **Implement ongoing monitoring** for recall, missed cases, alert volume, average risk scores, PSI, source-data quality, and subgroup performance, with explicit escalation thresholds and assigned owners.
-5. **Require human oversight and documented approval** before redeployment, including periodic review of intervention outcomes and potential unintended impacts.
+A separate **domain classifier achieved a held-out ROC AUC of 0.9709**, showing that the two cohorts are highly distinguishable. Its leading coefficients included LMS logins, assignment submission percentage, online delivery, and international status. This corroborates substantial population/data change but does **not** prove which shifts caused the prediction model's decline.
 
-These are audit recommendations; this repository does **not** implement a production alerting or monitoring service.
+## Institutional Changes and Drift Interpretation
+
+The scenario's change log provides plausible explanations for several observed shifts. These are **contextual hypotheses**, not causal findings.
+
+| Change in 2024–2025 | Evidence in the audit | Interpretation / follow-up |
+| --- | --- | --- |
+| International study-permit restrictions (2024) | `international` PSI = 0.1575 | A change in cohort composition could affect generalizability; review segment coverage. |
+| Expansion of online offerings to working adults (2024) | `delivery_mode` PSI = 0.4468; `commute_minutes` PSI = 0.4099; `age` PSI = 0.1427 | A shift toward online and older students is consistent with the observed changes in delivery, commuting, and age distributions. |
+| LMS vendor migration (January 2025) | `lms_logins_first4wks` PSI = 3.4637 | Check whether login counting, units, extraction, or field mapping changed; validate the feed before retraining. |
+| Automatic deregistration for unpaid balances (Fall 2025) | Balance-owing dropout rate = 58.24%; recall = 44.65%, while `outstanding_balance` PSI = 0.0044 and `has_balance` PSI = 0.0010 | The feature distributions stayed relatively stable, but the policy may have changed how financial status relates to the outcome: **potential concept drift**. |
+
+**Critical distinction:** PSI detects changes in the *distribution of inputs*. It cannot by itself detect a change in the *relationship between an input and the target*. The balance-related findings illustrate why outcome monitoring must accompany feature-drift monitoring.
+
+## Monitoring and Response Framework
+
+The following is a **proposed governance plan derived from the audit**, not an implemented production monitoring system.
+
+| Monitor | Proposed trigger | Review cadence | Response |
+| --- | --- | --- | --- |
+| Overall recall at 0.30 | AMBER: < 75%; RED: < 60% | Each term, once outcomes are available | Investigate missed cases; pause automated alerts and retrain at RED. |
+| Alert rate and mean predicted risk | Alert rate outside 40–70%, or substantial shift from the 2023 baseline | Each term and after source changes | Verify upstream data first; then reassess threshold, calibration, or retraining. |
+| Key-feature PSI | AMBER: 0.10–< 0.25; RED: ≥ 0.25 | Each term and after system changes | Review drivers; validate mappings and retrain where warranted. |
+| LMS data quality | Missingness > 5%, undocumented vendor change, or PSI ≥ 0.10 | Weekly after an LMS change, then monthly | Suspend use of the affected feed until validated. |
+| Subgroup recall and risk gaps | Subgroup recall < 75%; escalate if balance-group recall < 50% or between-group recall gap > 15 points | Each term | Prioritize targeted human outreach and evaluate subgroup performance before redeployment. |
+| Balance-owing outcomes | Recall < 50%, dropout-rate ratio > 2×, or risk gap > 0.20 | Each term and after policy changes | Provide financial-support review regardless of model flag; validate on post-policy outcomes. |
+| Domain-classifier AUC | AMBER: 0.60–0.69; RED: ≥ 0.70 | Each term | Investigate separating features; assess whether continued use is appropriate. |
+
+Thresholds are **case-study proposals**, not externally validated industry standards. Monitoring outcome-based metrics requires labels to become available; leading indicators and data-quality checks can be monitored earlier.
+
+## Audit Recommendation
+
+**Pause automated alerts, repair the data feed, then retrain and validate before the next intake.**
+
+1. **Validate the LMS integration:** confirm that login counts have consistent definitions, units, and extraction logic across vendors.
+2. **Retrain on representative recent data:** account for the changed cohort and financial policy, and re-evaluate recall, precision, threshold choice, and subgroup outcomes.
+3. **Maintain human-led support during the pause:** advisors should be able to identify students with financial or academic concerns independently of model flags.
+4. **Require accountable redeployment:** document validation evidence, provide interpretable risk factors, allow advisor overrides, and obtain formal governance approval.
+5. **Monitor after launch:** track data quality, cohort drift, outcome-based performance, and subgroup disparities rather than relying on accuracy alone.
 
 ## Repository Structure
 
@@ -108,40 +129,48 @@ ml-model-drift-audit/
 ├── notebooks/
 │   └── model_drift_audit.ipynb
 ├── docs/
-│   └── model_drift_audit_report.docx
+│   └── model_drift_audit_report.pdf
 ├── requirements.txt
 ├── .gitignore
 └── README.md
 ```
 
-## Getting Started
+*If the report is retained as `.docx`, update the path above accordingly. Publish only files whose redistribution is permitted.*
 
-**Prerequisites:** Python 3.14.7 and Jupyter support in VS Code (or JupyterLab).
+## Reproduce the Analysis
 
-1. Clone or download the repository and open its root folder in VS Code.
-2. Create and activate a virtual environment, then install dependencies:
+**Environment used:** Python 3.14.7; pandas 3.0.6, NumPy 2.5.4, scikit-learn 1.9.1, SciPy 1.18.1, Matplotlib 3.11.2, Seaborn 0.13.2.
 
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   python -m pip install -r requirements.txt
-   ```
+From the repository root, on Windows PowerShell:
 
-3. Ensure both cohort CSV files are available in `data/`.
-4. Open `notebooks/model_drift_audit.ipynb`, select the project's Python environment, and run the notebook from top to bottom.
+```powershell
+git clone https://github.com/YOUR_USERNAME/ml-model-drift-audit.git
+cd ml-model-drift-audit
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
 
-**Working-directory note:** The notebook currently uses `Path.cwd().parent / "data"`; it expects the Jupyter working directory to be `notebooks/`. If your Jupyter kernel starts in the repository root, adjust the path or the working directory before running.
+Open `notebooks/model_drift_audit.ipynb` in VS Code with the Python/Jupyter extensions, select the `.venv` kernel, and run all cells. The two cohort CSVs must be present in `data/`.
 
-## Tools and Skills Demonstrated
+**Path note:** The notebook uses `Path.cwd().parent / "data"`, so it expects the kernel's working directory to be `notebooks/`. If the kernel starts in the repository root, change the working directory or adjust the path before running. A fresh-environment installation has not been independently verified as part of this README.
 
-**Python · pandas · NumPy · scikit-learn · SciPy · Matplotlib · Seaborn**
+## Technology and Analytical Skills
 
-Exploratory data analysis, feature engineering, classification, model validation, cohort comparison, statistical hypothesis testing, data drift detection, subgroup performance analysis, and responsible AI monitoring.
+**Python · pandas · NumPy · scikit-learn · SciPy · Matplotlib · Seaborn · Jupyter**
 
-## Scope and Limitations
+Classification and model validation · Feature engineering and preprocessing pipelines · Statistical testing · Data drift and domain classification · Subgroup diagnostics · Model risk monitoring · Evidence-based business recommendations
 
-- This is a **fictional educational case study**, not an audit of a real institution or a live student-support system.
-- The 2023 metrics use a held-out sample, whereas 2025 metrics use the complete later cohort; the sample sizes and cohort compositions differ.
-- Distribution shift, statistical association, and changes in model performance do not by themselves establish causation.
-- The group-level risk gap is descriptive; formal calibration analysis and post-retraining validation are outside the implemented scope.
-- Data redistribution should follow the original dataset's license or publication terms.
+## Limitations
+
+- The college, system, and events are part of a **fictional educational scenario**; no production deployment or live monitoring is included.
+- The 2023 performance figures come from a held-out test split, while 2025 results use the full later cohort; their sample sizes and underlying populations differ.
+- Group-level mean-risk gaps are descriptive and do not substitute for individual-level calibration curves or causal inference.
+- Observed policy and platform changes provide plausible explanations, not verified causal effects.
+- Retraining, deployment, and the proposed monitoring controls are **recommendations**, not completed implementations.
+
+## References
+
+1. S. Rabanser, S. Günnemann, and Z. C. Lipton, “Failing loudly: An empirical study of methods for detecting dataset shift,” *Advances in Neural Information Processing Systems*, vol. 32, 2019. [Paper](https://papers.nips.cc/paper/2019/hash/846c260d715e5b854ffad5f70a516c88-Abstract.html).
+2. T. Saito and M. Rehmsmeier, “The precision-recall plot is more informative than the ROC plot when evaluating binary classifiers on imbalanced datasets,” *PLOS ONE*, vol. 10, no. 3, e0118432, 2015. [DOI](https://doi.org/10.1371/journal.pone.0118432).
+3. E. Tabassi, *Artificial Intelligence Risk Management Framework (AI RMF 1.0)*, NIST AI 100-1, 2023. [DOI](https://doi.org/10.6028/NIST.AI.100-1).
