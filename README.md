@@ -129,13 +129,11 @@ ml-model-drift-audit/
 ├── notebooks/
 │   └── model_drift_audit.ipynb
 ├── docs/
-│   └── model_drift_audit_report.pdf
+│   └── model_drift_audit_report.docx
 ├── requirements.txt
 ├── .gitignore
 └── README.md
 ```
-
-*If the report is retained as `.docx`, update the path above accordingly. Publish only files whose redistribution is permitted.*
 
 ## Reproduce the Analysis
 
